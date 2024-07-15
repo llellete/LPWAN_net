@@ -199,7 +199,7 @@ void vRadio_StartTx_Variable_Packet(U8 channel, U8 *pioRadioPacket, U8 length)
   si446x_write_tx_fifo(length, pioRadioPacket);
 
   /* Start sending packet, channel 0, START immediately */
-   si446x_start_tx(channel, 0x80, length);
+   si446x_start_tx(0, 0x80, length);
  
 }
 
@@ -208,19 +208,17 @@ state vSendRadioMessage(U8 *pioRadioPacket){
   if(pioRadioPacket == 0){
       return ERROR;
   }else{
-    vRadio_StartTx_Variable_Packet(pRadioConfiguration->Radio_ChannelNumber, pioRadioPacket, pRadioConfiguration->Radio_PacketLength);
+    vRadio_StartTx_Variable_Packet(0 , pioRadioPacket, pRadioConfiguration->Radio_PacketLength);
     while(vMessageSent() == ERROR);
     return OK;
   }
 }
 
 state vStartReception(){
-  if(pRadioConfiguration->Radio_PacketLength == 0){
-      return ERROR;
-  }else{
+
       vRadio_StartRX(pRadioConfiguration->Radio_PacketLength);
       return OK;
-  }
+
 }
 
 void vRadioSleep(){

@@ -17,7 +17,7 @@
 
 
 
-static unsigned int MY_ID = 2;
+static unsigned int MY_ID = 1;
 static unsigned int NODE_ID;
 
 static U16 currentTimeMs = 0x0000;

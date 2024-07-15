@@ -14,7 +14,7 @@
 
 typedef struct mac_layer_funcs_{
   state   (*mac_layer_init)();
-  state   (*mac_layer_send_packet)(unsigned char , net_StandardMessage) reentrant;
+  state   (*mac_layer_send_packet)(unsigned char ,unsigned char, net_StandardMessage) reentrant;
   net_StandardMessage (*mac_layer_receive_packet)();
   void    (*mac_layer_set_id)(unsigned char);
   state   (*mac_layer_send_broadcast)(routTable table[SIZE_ROUT]) reentrant;

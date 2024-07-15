@@ -58,9 +58,9 @@ extern netstack_t netstack;
 
 
 
-void sendStandard(unsigned int currentTimeMs){
+void sendStandard(){
   // Creación del paquete a enviar asignándole el paquete de la primera posición del buffer de transmisión
-
+  unsigned int currentTimeMs;
   net_StandardMessage message;
 
   message = get_tx_packet();
@@ -80,7 +80,10 @@ void sendStandard(unsigned int currentTimeMs){
 
        message.packet_hdr.mac_hdr.timestamp = currentTimeMs;
        Lcd_Write_Line(4, "Not message");
+
    }
+      memset(&customRadioPacket, 0, sizeof(customRadioPacket));
+
 
       // Copia en memoria del paquete a enviar en el buffer de la radio y su envío
 
@@ -102,7 +105,7 @@ void sendStandard(unsigned int currentTimeMs){
  */
 
 
-void sendAck(){
+void sendACK(U8 rout){
   // Creación de un ACK para su transmisión
 
   ACKMessage message;
@@ -134,6 +137,8 @@ void sendAck(){
   Lcd_Write_Line(4, "Ack sent");
 
   FSM = BEACON_ACTIVE;
+
+  put_rout_main(rout);
 }
 
 
@@ -189,6 +194,8 @@ void sendBeacon(){
   memcpy(&customRadioPacket[0], &message, sizeof(BeaconMessage));
 
   netstack.phy_layer_funcs->phy_layer_sendPacket(&customRadioPacket[0]);
+
+  Lcd_Write_Line(4, "Sending Beacon");
 
 
 }
@@ -246,7 +253,7 @@ void updateCount(U16 time) {
   mTmr_StopTmr0();
   mPca_StopPcaTmr();
   set_pca = TRUE;
-  diff = (PCA_Count - time);
+  diff = (PCA_Count - time) + 0x0050;
   vPca_InitPcaTmr(bPca_PcaCps_100_c, 0, diff, TRUE);
   mPca_EnablePcaTmr();
   mTmr_StartTmr0();
@@ -363,7 +370,7 @@ void process_beacon_message() {
 }
 
 
-void process_sync_message() {
+void process_sync_message(U8 rout) {
 
   // Copiamos el mensaje recibido para su processación
 
@@ -378,7 +385,7 @@ void process_sync_message() {
 
   vHmi_ChangeLedState(eHmi_Led2_c, eHmi_LedBlinkOnce_c);
 
-  sendAck();
+  sendACK(rout);
 
 }
 
@@ -416,12 +423,6 @@ void process_standard_message() {
   net_StandardMessage receivedMessage;
   memcpy(&receivedMessage, &customRadioPacket[0], sizeof(net_StandardMessage));
 
-  // Leemos y sacamos por pantalla el RSSI
-
-  RSSI = (netstack.phy_layer_funcs->phy_layer_rssi()/2)-130;
-  sprintf(customRadioPacket, "RSSI:%d dBm", RSSI);
-  Lcd_Write_Line(3, customRadioPacket);
-
   // Se procesa el mensaje Standard
 
    // Para la recepción en estado estacionario, se recibe el mensaje y se copia en el buffer de RX para ser procesado por las capas superiores
@@ -433,19 +434,51 @@ void process_standard_message() {
 
    if(receivedMessage.packet_hdr.mac_hdr.nodeID == MY_ID){
 
-       Lcd_Write_Line(4, "Message received");
-       put_rx_packet(receivedMessage);
+       if(receivedMessage.packet_hdr.net_hdr.fateID != MY_ID){
+
+           RSSI = (netstack.phy_layer_funcs->phy_layer_rssi()/2)-130;
+           sprintf(customRadioPacket, "RSSI:%d dBm", RSSI);
+           Lcd_Write_Line(3, customRadioPacket);
+
+           Lcd_Write_Line(4, "Redirecting packet");
+           send_message(receivedMessage.packet_hdr.net_hdr.fateID);
+
+       } else {
+
+           RSSI = (netstack.phy_layer_funcs->phy_layer_rssi()/2)-130;
+           sprintf(customRadioPacket, "RSSI:%d dBm", RSSI);
+           Lcd_Write_Line(3, customRadioPacket);
+
+           Lcd_Write_Line(4, "Message received");
+           put_rx_packet(receivedMessage);
+
+       }
 
    }else if(receivedMessage.packet_hdr.mac_hdr.nodeID == 0){
 
-       if(receivedMessage.packet_hdr.net_hdr.table[0].fateID == MY_ID){
 
-       Lcd_Write_Line(4, "Rout Table received");
-       }
+           // Leemos y sacamos por pantalla el RSSI
+
+           RSSI = (netstack.phy_layer_funcs->phy_layer_rssi()/2)-130;
+           sprintf(customRadioPacket, "RSSI:%d dBm", RSSI);
+           Lcd_Write_Line(3, customRadioPacket);
+
+           Lcd_Write_Line(4, "Rout Table received");
+           update_rout_table(receivedMessage.packet_hdr.net_hdr.table);
 
    }else{
 
-       Lcd_Write_Line(4, "Not Message");
+       if (Role == MAIN){
+           // Leemos y sacamos por pantalla el RSSI
+
+           RSSI = (netstack.phy_layer_funcs->phy_layer_rssi()/2)-130;
+           sprintf(customRadioPacket, "RSSI:%d dBm", RSSI);
+           Lcd_Write_Line(3, customRadioPacket);
+
+           Lcd_Write_Line(4, "Redirecting packet");
+           send_message(receivedMessage.packet_hdr.net_hdr.fateID);
+
+       }
    }
 
 
@@ -482,7 +515,7 @@ void tdma_handler() {
 
       // Rol BEACON
 
-      if(deviceArray[ARRAY_INDEX].role == BEACON){
+      if((deviceArray[ARRAY_INDEX].role == BEACON) && (Role != NODE)){
 
           if(FSM == BEACON_ACTIVE){
 
@@ -497,15 +530,10 @@ void tdma_handler() {
 
       }
 
-
-      // Rol MAIN
-
-      if(deviceArray[ARRAY_INDEX].role == MAIN){
-
-          sendStandard(currentTimeMs);
-          sprintf(customRadioPacket, "CS:%d S:%d T:%u", (int)deviceArray[ARRAY_INDEX].slot, (int)deviceArray[ARRAY_INDEX].state, currentTimeMs);
-          Lcd_Write_Line(2, customRadioPacket);
-
+      if((Role != NON_ASSIGNED) && (deviceArray[ARRAY_INDEX].role != BEACON)){
+        sendStandard();
+        sprintf(customRadioPacket, "CS:%d S:%d T:%u", (int)deviceArray[ARRAY_INDEX].slot, (int)deviceArray[ARRAY_INDEX].state, currentTimeMs);
+        Lcd_Write_Line(2, customRadioPacket);
       }
 
       // Rol NON_ASSIGNED
@@ -518,6 +546,7 @@ void tdma_handler() {
       }else{
 
           cyclesWithoutRole = 0;
+
 
       }
 
@@ -550,7 +579,7 @@ void tdma_handler() {
 
       // Se comprueba el número de slots sin recibir un paquete
 
-      if(Role == NODE) {
+      /*if(Role == NODE) {
 
           new_sync_counter++;
 
@@ -562,35 +591,53 @@ void tdma_handler() {
           new_sync_counter = 0;
 
       }
-
+ */
   }
 
 }
 
 // Función para envío de paquetes
 
-state send_packet(unsigned char ID, net_StandardMessage message){
+state send_packet(unsigned char ID, unsigned char fateID, net_StandardMessage message){
 
   message.packet_hdr.mac_hdr.type = STANDARD_MSG;
   message.packet_hdr.mac_hdr.deviceID = MY_ID;
   message.packet_hdr.mac_hdr.nodeID = ID;
   currentTimeMs = PCA0;
   message.packet_hdr.mac_hdr.timestamp = currentTimeMs;
+  message.packet_hdr.net_hdr.fateID = fateID;
 
   return put_tx_packet(message);
 
 }
 
 state send_broadcast(routTable table[SIZE_ROUT]){
+  int i;
   net_StandardMessage message;
 
-  memcpy(message.packet_hdr.net_hdr.table, table, SIZE_ROUT);
+  routTable routTable[SIZE_ROUT];
+
+  for(i = 0; i < SIZE_ROUT; ++i){
+
+  routTable[i] = table[i];
+
+  }
+
+
+  for(i = 0; i < SIZE_ROUT; ++i){
+
+      message.packet_hdr.net_hdr.table[i] = routTable[i];
+
+  }
+
 
   message.packet_hdr.mac_hdr.type = BROADCAST_MSG;
   message.packet_hdr.mac_hdr.deviceID = MY_ID;
   message.packet_hdr.mac_hdr.nodeID = 0;
   currentTimeMs = PCA0;
   message.packet_hdr.mac_hdr.timestamp = currentTimeMs;
+  message.packet_hdr.net_hdr.fateID = 0;
+
 
   return put_tx_packet(message);
 
@@ -695,14 +742,15 @@ INTERRUPT(vIsr_INT0, INTERRUPT_INT0){
 
   if(customRadioPacket[0] == 0){
 
-      process_beacon_message();
+      if(Role == NON_ASSIGNED){
+
+          process_beacon_message();
+
+      }
 
   }else if(customRadioPacket[0] == 1){
 
-      put_rout_main(customRadioPacket[1]);
-      process_sync_message();
-
-
+      process_sync_message(customRadioPacket[1]);
 
   }else if(customRadioPacket[0] == 2){
 
@@ -710,7 +758,10 @@ INTERRUPT(vIsr_INT0, INTERRUPT_INT0){
 
   }else if(customRadioPacket[0] == 3 || customRadioPacket[0] == 4){
 
-      process_standard_message();
+
+          process_standard_message();
+
+
   }
 
   }

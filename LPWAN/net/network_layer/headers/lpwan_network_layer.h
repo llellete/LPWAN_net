@@ -19,8 +19,10 @@ void init_network_layer();
 void init_rout_table();
 state put_rout_main(unsigned int fateID);
 unsigned char get_next_jump_ID(unsigned int fateID);
-void send_message(unsigned int ID);
+void send_message(unsigned char ID);
 void send_routMessage(routTable table[SIZE_ROUT]);
+void update_rout_table(routTable new_table[SIZE_ROUT]);
+void resend_packet(net_StandardMessage netmessage);
 
 
 

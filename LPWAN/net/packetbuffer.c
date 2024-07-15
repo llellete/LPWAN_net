@@ -59,6 +59,10 @@ state put_tx_packet(net_StandardMessage message)
         tx_buffer.buffer[tx_buffer.rear] = message;
         return OK;
 
+
+
+
+
 }
 
 net_StandardMessage get_tx_packet()

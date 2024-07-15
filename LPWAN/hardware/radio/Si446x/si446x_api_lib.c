@@ -138,7 +138,7 @@ void si446x_part_info(void)
 void si446x_start_tx(U8 CHANNEL, U8 CONDITION, U16 TX_LEN)
 {
     Pro2Cmd[0] = SI446X_CMD_ID_START_TX;
-    Pro2Cmd[1] = CHANNEL;
+    Pro2Cmd[1] = 0;
     Pro2Cmd[2] = CONDITION;
     Pro2Cmd[3] = (U8)(TX_LEN >> 8);
     Pro2Cmd[4] = (U8)(TX_LEN);

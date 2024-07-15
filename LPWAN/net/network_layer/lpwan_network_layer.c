@@ -27,21 +27,29 @@ void init_network_layer(){
 }
 
 
-void send_message(unsigned int ID){
+void send_message(unsigned char ID){
 
     net_StandardMessage netmessage;
 
     unsigned char nodeID  = get_next_jump_ID(ID);
-    netmessage.packet_hdr.net_hdr.fateID = ID;
 
-    netstack.mac_layer_funcs->mac_layer_send_packet(nodeID, netmessage);
+    netstack.mac_layer_funcs->mac_layer_send_packet(nodeID, ID, netmessage);
 
 }
 
 void send_routMessage(routTable table[SIZE_ROUT]){
+  int i;
 
 
-    netstack.mac_layer_funcs->mac_layer_send_broadcast(table);
+    routTable routTable[SIZE_ROUT];
+
+    for(i = 0; i < SIZE_ROUT; ++i){
+
+    routTable[i] = table[i];
+
+    }
+
+    netstack.mac_layer_funcs->mac_layer_send_broadcast(routTable);
 
 }
 
@@ -88,6 +96,42 @@ state put_rout_main(unsigned int fateID){
 
 }
 
+void update_rout_table(routTable new_table[SIZE_ROUT]){
+
+  int i;
+
+  table.table[0].fateID = new_table[0].sourceID;
+  table.table[0].next_jump_ID = new_table[0].sourceID;
+  table.table[0].sourceID = MY_ID;
+  table.table[0].steps = 1;
+
+  for(i = 1; i < SIZE_ROUT; ++i){
+
+      if(new_table[i].fateID != MY_ID){
+
+      table.table[i].next_jump_ID = new_table[i-1].sourceID;
+      table.table[i].fateID =  new_table[i-1].fateID;
+      table.table[i].sourceID = MY_ID;
+      table.table[i].steps = 2;
+
+      }else{
+
+          table.table[i].next_jump_ID = 0;
+          table.table[i].fateID =  0;
+          table.table[i].sourceID = 0;
+          table.table[i].steps = 0;
+
+      }
+  }
+
+}
+
+void resend_packet(net_StandardMessage netmessage){
+
+
+
+}
+
 unsigned char get_next_jump_ID(unsigned int fateID){
   int i = 0;
 
@@ -109,6 +153,7 @@ INTERRUPT(vIsr_INT1, INTERRUPT_INT1){
   mTmr_ClearINT1();
   Lcd_Write_Line(4, "Message buffer");
 
-  send_message(1);
+  //send_message(2);
+  send_routMessage(table.table);
 
 }
